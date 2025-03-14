@@ -1,0 +1,22 @@
+services:
+  app:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    volumes:
+      - ~/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+    command: uvicorn app/main:app --host "0.0.0.0" --port 8080
+    ports:
+      - "8080:8080"
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - GOOGLE_CLOUD_PROJECT=sandbox-449820
+      - BUCKET_NAME = tmp-sandbox-bucket
+
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+          ignore:
+            - node_modules/
