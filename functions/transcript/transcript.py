@@ -93,11 +93,17 @@ def on_new_audio(cloud_event):
     assert BUCKET_TRANSCRIPTS, "BUCKET_TRANSCRIPTS environment variable is not set"
     assert BUCKET_PROCESSED, "BUCKET_PROCESSED environment variable is not set"
 
-    if file_name.endswith(".mp3"):
-        # Read file from GCS
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(file_name)
-        audio_bytes = blob.download_as_bytes()
+    if file_name.endswith(".mp3") or file_name.endswith(".wav"):
+        try:
+            # Read file from GCS
+            bucket = storage_client.bucket(bucket_name)
+            blob = bucket.blob(file_name)
+            audio_bytes = blob.download_as_bytes()
+        except Exception as e:
+            log.error(f"Error reading file {file_name}: {e}")
+            log.error("File not longer exists")
+            return
+
         try:
             transcription = transcribe_audio(audio_bytes)
             log.info(f"Transcription: {transcription[:100]}...")
@@ -126,7 +132,7 @@ def on_new_audio(cloud_event):
         bucket_processed = storage_client.bucket(BUCKET_PROCESSED)
 
         # construct filename with datetime in format YYMMDD_HHMMSS
-        new_file_name = f"{file_name}_{datetime.now().strftime('%y%m%d_%H%M%S')}"
+        new_file_name = f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{file_name}"
         bucket.copy_blob(blob, bucket_processed, new_file_name)
         blob.delete()
         log.info(f"File {file_name} moved to {BUCKET_PROCESSED}")
