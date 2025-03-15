@@ -4,6 +4,7 @@ import openai
 from google.cloud import storage, secretmanager
 import dotenv
 import os
+from datetime import datetime
 
 dotenv.load_dotenv()
 
@@ -123,7 +124,10 @@ def on_new_audio(cloud_event):
     try:
         # tidy up and move audio file to processed folder
         bucket_processed = storage_client.bucket(BUCKET_PROCESSED)
-        bucket.copy_blob(blob, bucket_processed, file_name)
+
+        # construct filename with datetime in format YYMMDD_HHMMSS
+        new_file_name = f"{file_name}_{datetime.now().strftime('%y%m%d_%H%M%S')}"
+        bucket.copy_blob(blob, bucket_processed, new_file_name)
         blob.delete()
         log.info(f"File {file_name} moved to {BUCKET_PROCESSED}")
 
