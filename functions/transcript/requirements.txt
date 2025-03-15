@@ -1,0 +1,6 @@
+functions-framework==3.8.2
+google-cloud-core==2.4.3
+google-cloud-secret-manager==2.23.1
+google-cloud-storage==3.1.0
+openai==1.66.3
+python-dotenv==1.0.1

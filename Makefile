@@ -37,3 +37,13 @@ google-init:
 
 google-deploy-transcript:
 	bash ./script/deploy_transcript.sh
+
+google-audio-trigger:
+	gcloud eventarc triggers update trigger-on-new-audio \
+		--location=europe-central2 \
+		--service-account=347891831748-compute@developer.gserviceaccount.com \
+		--destination-run-service=on-new-audio \
+		--destination-run-region=europe-central2 \
+		--destination-run-path="/on-new-audio" \
+		--event-filters="bucket=butler-audio" \
+		--event-filters="type=google.cloud.storage.object.v1.finalized"

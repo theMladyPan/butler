@@ -14,7 +14,7 @@ echo "PROCESSED_FOLDER: ${PROCESSED_FOLDER}"
 echo "BASE_IMAGE: ${BASE_IMAGE}"
 
 gcloud run deploy on-new-audio \
-    --source functions/
+    --source functions/ \
     --function on_new_audio \
     --base-image ${BASE_IMAGE} \
     --set-env-vars OPENAI_API_KEY=${OPENAI_API_KEY} \
