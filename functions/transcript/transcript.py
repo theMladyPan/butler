@@ -115,20 +115,23 @@ def on_new_audio(cloud_event):
             log.error(f"{file_name}: {e}")
             return
 
+        log.info(f"Transcription saved to {BUCKET_TRANSCRIPTS}/{file_name}.txt")
+
     else:
         log.warning(f"File {file_name} is not an audio file")
 
-        try:
-            # tidy up and move audio file to processed folder
-            bucket_processed = storage_client.bucket(BUCKET_PROCESSED)
-            bucket.copy_blob(blob, bucket_processed, file_name)
-            blob.delete()
+    try:
+        # tidy up and move audio file to processed folder
+        bucket_processed = storage_client.bucket(BUCKET_PROCESSED)
+        bucket.copy_blob(blob, bucket_processed, file_name)
+        blob.delete()
+        log.info(f"File {file_name} moved to {BUCKET_PROCESSED}")
 
-        except Exception as e:
-            log.error(f"Error archiving file {file_name}: {e}")
-            log.error(f"to bucket {BUCKET_PROCESSED}")
+    except Exception as e:
+        log.error(f"Error archiving file {file_name}: {e}")
+        log.error(f"to bucket {BUCKET_PROCESSED}")
 
-        return
+    return
 
 
 if __name__ == "__main__":
