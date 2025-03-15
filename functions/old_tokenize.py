@@ -21,7 +21,7 @@ ANALYZER_SYSTEM_PROMPT = """
 You are an AI assistant that analyzes uploaded text, files or transcription.
 Extract all data and details suitable for embedding creation.
 Do not use markdown, just plain text.
-If suitable add a quick summary at the end.
+Add a short summary at the end full of details and numbers.
 """
 
 

@@ -16,7 +16,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", None)
-BUCKET_NAME = os.getenv("BUCKET_NAME", "sandbox-449820.appspot.com")
+BUCKET_NAME = os.getenv("BUCKET_NAME", None)
 
 assert GOOGLE_CLOUD_PROJECT, "GOOGLE_CLOUD_PROJECT environment variable is not set"
 assert BUCKET_NAME, "BUCKET_NAME environment variable is not set"
@@ -36,7 +36,7 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.post("/upload/record")
+@app.post("/upload/audio")
 async def upload_audio(file: UploadFile = File(...)):
     """Handles audio file upload and saves to Google Cloud Storage."""
     file_location = f"app/static/{file.filename}"
