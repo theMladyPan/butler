@@ -15,8 +15,11 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
 
-GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "sandbox-449820")
+GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", None)
 BUCKET_NAME = os.getenv("BUCKET_NAME", "sandbox-449820.appspot.com")
+
+assert GOOGLE_CLOUD_PROJECT, "GOOGLE_CLOUD_PROJECT environment variable is not set"
+assert BUCKET_NAME, "BUCKET_NAME environment variable is not set"
 
 
 def upload_to_gcs(file_path, file_name, folder: str) -> str:
