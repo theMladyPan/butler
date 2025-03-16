@@ -1,4 +1,5 @@
 REGION := europe-central2
+PROJECT_ID := butler-453810
 
 run:
 	if [ ! -d ".venv" ]; then \
@@ -38,12 +39,25 @@ google-init:
 google-deploy-transcript:
 	bash ./script/deploy_transcript.sh
 
-google-audio-trigger:
-	gcloud eventarc triggers update trigger-on-new-audio \
-		--location=europe-central2 \
+
+build-on-document:
+	docker build --pull --rm -f 'functions/document/Dockerfile' \
+		-t 'butler-on-document:latest' 'functions/document'
+	docker image push docker.io/themladypan/butler-on-document:latest
+
+deploy-on-document:
+	gcloud run deploy on-document \
+		--image docker.io/themladypan/butler-on-document:latest \
+		--platform managed \
+		--region europe-central2 \
+		--allow-unauthenticated
+
+trigger-on-document:
+	gcloud eventarc triggers create trigger-on-document \
+		--location=us-central1 \
 		--service-account=347891831748-compute@developer.gserviceaccount.com \
-		--destination-run-service=on-new-audio \
+		--destination-run-service=on-document \
 		--destination-run-region=europe-central2 \
-		--destination-run-path="/on-new-audio" \
-		--event-filters="bucket=butler-audio" \
+		--destination-run-path="/" \
+		--event-filters="bucket=butler-documents" \
 		--event-filters="type=google.cloud.storage.object.v1.finalized"

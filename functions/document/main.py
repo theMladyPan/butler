@@ -6,7 +6,9 @@ import logging
 import json
 from pydantic import BaseModel
 import time
+import base64
 from datetime import datetime
+import openai
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -29,8 +31,74 @@ assert BUCKET_TRANSCRIPTS, "BUCKET_TRANSCRIPTS environment variable is not set"
 assert BUCKET_PROCESSED, "BUCKET_PROCESSED environment variable is not set"
 
 
+# Replace dotenv with Secret Manager
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", False)
+if not OPENAI_API_KEY:
+    os.environ["OPENAI_API_KEY"] = get_secret("OPENAI_API_KEY")
+assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set"
+
+
+# Initialize OpenAI client
+openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+
 # Initialize Google Cloud Storage client
 storage_client = storage.Client()
+
+
+ANALYZER_SYSTEM_PROMPT = f"""
+You are an AI assistant that analyzes documents.
+Extract all data and details suitable for embedding creation and integration
+into vector database as a knowledge base.
+Write a short summary what is the document about page by page.
+Extract all the key points and details.
+Respond in analyzed texts original language.
+Do not use markdown or HTML, just plain text.
+Current date and time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+"""
+
+
+def transcribe_pdf(file_content: bytes) -> str:
+    base64_string = base64.b64encode(file_content).decode("utf-8")
+
+    response = openai_client.responses.create(
+        model="gpt-4o",
+        input=[
+            {"role": "system", "content": ANALYZER_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_file",
+                        "filename": "file.pdf",
+                        "file_data": f"data:application/pdf;base64,{base64_string}",
+                    },
+                ],
+            },
+        ],
+    )
+    try:
+        return response.output_text
+
+    except Exception as e:
+        log.error(f"Error analyzing file: {e}")
+        return str(response)
+
+
+def _main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("pdf", help="Transcribe audio file")
+    args = parser.parse_args()
+
+    with open(args.pdf, "rb") as audio_file:
+        transcription = transcribe_pdf(audio_file.read())
+
+    with open(
+        f"{args.pdf}_transcript.txt",
+        "w",
+    ) as f:
+        f.write(transcription)
+    print(transcription)
 
 
 # Triggered by a change in a Google Cloud Storage bucket
@@ -47,25 +115,44 @@ def on_document(cloud_event):
     log.info(f"Processing file: {bucket_name}:{file_name}")
     log.info(f"Event ID: {event_id}, Event type: {event_type}")
 
-    if file_name.endswith(".json"):
+    BUCKET_TRANSCRIPTS = os.getenv("BUCKET_TRANSCRIPTS")
+    BUCKET_PROCESSED = os.getenv("BUCKET_PROCESSED")
+    assert BUCKET_TRANSCRIPTS, "BUCKET_TRANSCRIPTS environment variable is not set"
+    assert BUCKET_PROCESSED, "BUCKET_PROCESSED environment variable is not set"
+
+    if file_name.endswith(".pdf"):
         try:
             # Read file from GCS
             bucket = storage_client.bucket(bucket_name)
             blob = bucket.blob(file_name)
-            knowledge_str = blob.download_as_string().decode("utf-8")
-            result = process_knowledge(knowledge_str)
-            log.info(f"Upsert result: {result}")
-
-        except UnicodeDecodeError as e:
-            log.error(f"Error decoding file: {e}")
-            return
-
+            pdf_bytes = blob.download_as_bytes()
         except Exception as e:
             log.error(f"Error reading file {file_name}: {e}")
             log.error("File not longer exists")
             return
+
+        try:
+            transcription = transcribe_pdf(pdf_bytes)
+            log.info(f"Transcription: {transcription[:100]}...")
+
+        except Exception as e:
+            log.error(f"Error transcribing file {file_name}: {e}")
+            return
+
+        try:
+            bucket_transcripts = storage_client.bucket(BUCKET_TRANSCRIPTS)
+            # save transcription to new file
+            new_blob = bucket_transcripts.blob(f"{file_name}.txt")
+            new_blob.upload_from_string(transcription)
+        except Exception as e:
+            log.error(f"Error saving transcription to bucket {BUCKET_TRANSCRIPTS}: {e}")
+            log.error(f"{file_name}: {e}")
+            return
+
+        log.info(f"Transcription saved to {BUCKET_TRANSCRIPTS}/{file_name}.txt")
+
     else:
-        log.error(f"File {file_name} is not a knowledge file")
+        log.warning(f"File {file_name} is not an audio file")
 
     try:
         # tidy up and move audio file to processed folder
@@ -81,16 +168,10 @@ def on_document(cloud_event):
         log.error(f"Error archiving file {file_name}: {e}")
         log.error(f"to bucket {BUCKET_PROCESSED}")
 
+    return
+
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="upsert knowledge to Qdrant")
-    parser.add_argument("knowledge", help="Knowledge filename to upsert")
-    args = parser.parse_args()
-
-    with open(args.knowledge, "r") as f:
-        knowledge_str = f.read()
-
-    result = process_knowledge(knowledge_str)
-    log.info(f"Upsert result: {result}")
+    _main()

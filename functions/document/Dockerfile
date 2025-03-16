@@ -10,9 +10,6 @@ WORKDIR $APP_HOME
 COPY . .
 COPY .env .
 
-# Install SQLite3 for qdrant
-RUN apk add --no-cache sqlite sqlite-dev  
-
 # Install production dependencies.
 RUN pip install functions-framework
 RUN pip install -r requirements.txt
