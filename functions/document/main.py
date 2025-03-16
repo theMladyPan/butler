@@ -62,7 +62,7 @@ def transcribe_pdf(file_content: bytes) -> str:
     base64_string = base64.b64encode(file_content).decode("utf-8")
 
     response = openai_client.responses.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         input=[
             {"role": "system", "content": ANALYZER_SYSTEM_PROMPT},
             {
@@ -160,8 +160,7 @@ def on_document(cloud_event):
 
         # construct filename with datetime in format YYMMDD_HHMMSS
         new_file_name = f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{file_name}"
-        bucket.copy_blob(blob, bucket_processed, new_file_name)
-        blob.delete()
+        bucket.move_blob(blob, bucket_processed, new_file_name)
         log.info(f"File {file_name} moved to {BUCKET_PROCESSED}")
 
     except Exception as e:

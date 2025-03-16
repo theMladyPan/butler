@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
 load_dotenv()
@@ -87,6 +87,28 @@ async def search(search_phrase: str, limit: int = 5) -> list[ScoredPoint]:
     return res
 
 
+async def summarize_knowledge_bit(knowledge: str, question: str) -> str:
+    response = await openai_client.responses.create(
+        model="gpt-4o-mini",
+        input=[
+            {"role": "developer", "content": knowledge},
+            {"role": "user", "content": question},
+        ],
+        instructions=f"""
+            Be concise.
+            You are an AI business assistant that helps extract data from provided knowledge.
+            Analyze provided knowledge and provide details from the knowledge for summarizing agent
+            which will use these details while generating response to the question.
+            Do not make summary of provided knowledge, just extract details from the knowledge.
+            Do not use markdown or HTML, just plain text.
+            Current date and time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            """,
+    )
+    log.info(f"Summarized knowledge bit: {response.output_text}")
+
+    return response.output_text
+
+
 async def delete_collection():
     await client.delete_collection(collection_name=QDRANT_COLLECTION)
 
@@ -97,9 +119,8 @@ async def collection_info():
     return {"count": count, "info": info}
 
 
-async def summarize(question: str, knowledge_bits: list[str], web_search_results: str = "") -> str:
+async def summarize(question: str, knowledge_bits: list[str]) -> str:
     input_data = [{"role": "developer", "content": bit} for bit in knowledge_bits]
-    # input_data.append({"role": "assistant", "content": web_search_results})
     input_data.append({"role": "user", "content": question})
 
     response = await openai_client.responses.create(
@@ -142,7 +163,7 @@ async def craft_knowledge_query(question: str) -> str:
             Determine what you need to know to answer the question. Craft a set of keywords suitable 
             for a search in the knowledge database based on user question.
             Current date and time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-            The output is a set of keywords (20-50 words) that can be used to search the knowledge database.
+            The output is a set of keywords (5-20 words) that can be used to search the knowledge database.
             """,
         input=question,
     )
@@ -154,10 +175,11 @@ async def craft_knowledge_query(question: str) -> str:
 
 async def retrieve_and_summarize(question: str) -> str:
     query = await craft_knowledge_query(question)
-    points = await search(query)
+    points = await search(question)
     knowledge = [point.payload.get("information_shard") for point in points]
     #  = await web_search(question)
-    return await summarize(question, knowledge)
+    knowledge_bits = [await summarize_knowledge_bit(bit, query) for bit in knowledge]
+    return await summarize(question, knowledge_bits)
 
 
 if __name__ == "__main__":
