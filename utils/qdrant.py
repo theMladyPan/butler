@@ -3,6 +3,7 @@ from qdrant_client.models import VectorParams, Distance, PointStruct
 from dotenv import load_dotenv
 import os
 import numpy as np
+import openai
 
 load_dotenv()
 QDRANT_ENDPOINT = os.getenv("QDRANT_ENDPOINT", None)
@@ -15,6 +16,23 @@ assert QDRANT_API_KEY, "QDRANT_API_KEY environment variable is not set"
 assert VECTOR_SIZE, "VECTOR_SIZE environment variable is not set"
 
 client = AsyncQdrantClient(url=f"{QDRANT_ENDPOINT}:6333", api_key=QDRANT_API_KEY)
+
+# Replace dotenv with Secret Manager
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", False)
+assert OPENAI_API_KEY, "OPENAI_API_KEY environment variable is not set"
+
+# Initialize OpenAI client
+openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+
+async def create_embedding(text: str) -> list[float]:
+    response = await openai_client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text,
+        dimensions=VECTOR_SIZE,
+    )
+
+    return response.data[0].embedding
 
 
 async def create_qdrant_collection():
@@ -45,7 +63,9 @@ async def random_upsert():
     )
 
 
-async def search(query_vector: np.ndarray):
+async def search(search_phrase: str):
+    query_vector = await create_embedding(search_phrase)
+
     res = await client.search(
         collection_name=QDRANT_COLLECTION,
         query_vector=query_vector,  # type: ignore
@@ -75,7 +95,7 @@ if __name__ == "__main__":
     group.add_argument("-d", "--delete", action="store_true", help="Delete a Qdrant collection")
     group.add_argument("-i", "--info", action="store_true", help="Get info about a Qdrant collection")
     group.add_argument("-r", "--random", action="store_true", help="Upsert random into a Qdrant collection")
-    group.add_argument("-s", "--search", action="store_true", help="Search a Qdrant collection")
+    group.add_argument("-s", "--search", help="Search a Qdrant collection")
     args = parser.parse_args()
 
     if args.create:
@@ -88,8 +108,7 @@ if __name__ == "__main__":
     elif args.random:
         asyncio.run(random_upsert())
     elif args.search:
-        query_vector = np.random.rand(VECTOR_SIZE)
-        res = asyncio.run(search(query_vector))
+        res = asyncio.run(search(args.search))
         print(res)
     else:
         parser.print_help()
