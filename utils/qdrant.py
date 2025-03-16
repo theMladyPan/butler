@@ -1,6 +1,6 @@
 from qdrant_client import AsyncQdrantClient
-from dotenv import load_dotenv
 from qdrant_client.models import VectorParams, Distance, PointStruct
+from dotenv import load_dotenv
 import os
 import numpy as np
 
