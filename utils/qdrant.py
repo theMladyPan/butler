@@ -74,11 +74,13 @@ async def search(search_phrase: str, limit: int = 5) -> list[ScoredPoint]:
     query_vector = await create_embedding(search_phrase)
 
     log.info(f"Searching for: {search_phrase}")
-    res = await client.search(
+    res = await client.query_points(
         collection_name=QDRANT_COLLECTION,
-        query_vector=query_vector,  # type: ignore
+        query=query_vector,  # type: ignore
         limit=limit,
     )
+    res = res.points
+
     max_similarity = max([point.score for point in res])
     log.info(f"Max similarity: {max_similarity}")
 
@@ -95,13 +97,15 @@ async def collection_info():
     return {"count": count, "info": info}
 
 
-async def summarize(question: str, knowledge_bits: list[str]) -> str:
-    input_data = [{"role": "user", "content": bit} for bit in knowledge_bits]
-    input_data.append({"role": "developer", "content": question})
+async def summarize(question: str, knowledge_bits: list[str], web_search_results: str = "") -> str:
+    input_data = [{"role": "developer", "content": bit} for bit in knowledge_bits]
+    # input_data.append({"role": "assistant", "content": web_search_results})
+    input_data.append({"role": "user", "content": question})
 
     response = await openai_client.responses.create(
         model="gpt-4o-mini",
         input=input_data,
+        tools=[{"type": "web_search_preview"}],
         instructions="""
             Be concise.
             You are an AI business assistant that helps user using provided knowledge.
@@ -116,17 +120,35 @@ async def summarize(question: str, knowledge_bits: list[str]) -> str:
     return response.output_text
 
 
+async def web_search(keywords: str) -> str:
+    response = await openai_client.responses.create(
+        model="gpt-4o-mini",
+        tools=[
+            {
+                "type": "web_search_preview",
+                "search_context_size": "low",
+            }
+        ],
+        input=keywords,
+    )
+
+    return response.output_text
+
+
 async def craft_knowledge_query(question: str) -> str:
     response = await openai_client.responses.create(
         model="gpt-4o-mini",
         instructions=f"""
-            Craft a keyword or a phrase suitable for a search in the knowledge database based on user question.
+            Determine what you need to know to answer the question. Craft a set of keywords suitable 
+            for a search in the knowledge database based on user question.
             Current date and time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            The output is a set of keywords (20-50 words) that can be used to search the knowledge database.
             """,
         input=question,
     )
     query = response.output_text
     log.info(f"Crafted query: {query}")
+    print(f"Searching for: {query} ... ")
     return query
 
 
@@ -134,6 +156,7 @@ async def retrieve_and_summarize(question: str) -> str:
     query = await craft_knowledge_query(question)
     points = await search(query)
     knowledge = [point.payload.get("information_shard") for point in points]
+    #  = await web_search(question)
     return await summarize(question, knowledge)
 
 
